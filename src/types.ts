@@ -135,12 +135,39 @@ export interface GoogleAddOperationsRequest {
   readonly enablePartialFailure: boolean;
 }
 
+/** One element of a Google error's field path, e.g. `{ fieldName: "operations", index: 3 }`. */
+export interface GoogleFieldPathElement {
+  readonly fieldName?: string;
+  readonly index?: number;
+}
+
+/** Location of a single Google Ads error within the request. */
+export interface GoogleErrorLocation {
+  readonly fieldPathElements?: readonly GoogleFieldPathElement[];
+}
+
+/** A single error inside a `GoogleAdsFailure` detail. */
+export interface GoogleAdsError {
+  readonly location?: GoogleErrorLocation;
+  readonly message?: string;
+}
+
+/** One `details[]` entry of a partial-failure error (a packed `GoogleAdsFailure`). */
+export interface GooglePartialFailureDetail {
+  readonly errors?: readonly GoogleAdsError[];
+}
+
+/** The `partialFailureError` object returned when some operations are rejected. */
+export interface GooglePartialFailureError {
+  readonly code?: number;
+  readonly message?: string;
+  /** Packed `GoogleAdsFailure` payloads carrying per-operation error locations. */
+  readonly details?: readonly GooglePartialFailureDetail[];
+}
+
 /** Response from `offlineUserDataJobs:addOperations`. */
 export interface GoogleAddOperationsResponse {
-  readonly partialFailureError?: {
-    readonly code?: number;
-    readonly message?: string;
-  };
+  readonly partialFailureError?: GooglePartialFailureError;
 }
 
 /** Response from creating an offline user data job. */

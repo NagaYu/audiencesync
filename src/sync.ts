@@ -23,6 +23,7 @@ import type {
   GoogleAddOperationsRequest,
   GoogleAddOperationsResponse,
   GoogleDestinationConfig,
+  GooglePartialFailureError,
   GoogleUserIdentifier,
   HashedCustomer,
   MetaDestinationConfig,
@@ -54,6 +55,34 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => {
     setTimeout(resolve, ms);
   });
+}
+
+/**
+ * Count how many operations in a batch were rejected by a Google partial-failure error.
+ *
+ * Google packs per-operation errors into `partialFailureError.details[].errors[]`, each carrying a
+ * `location.fieldPathElements` path like `[{ fieldName: "operations", index: N }, ...]`. We collect
+ * the distinct `operations` indices (multiple errors can target the same operation) and return that
+ * count, capped at `batchSize` for safety. Returns 0 when there is no partial failure.
+ */
+export function countFailedOperations(
+  partialFailureError: GooglePartialFailureError | undefined,
+  batchSize: number,
+): number {
+  if (partialFailureError?.details === undefined) {
+    return 0;
+  }
+  const failedIndices = new Set<number>();
+  for (const detail of partialFailureError.details) {
+    for (const err of detail.errors ?? []) {
+      for (const element of err.location?.fieldPathElements ?? []) {
+        if (element.fieldName === 'operations' && typeof element.index === 'number') {
+          failedIndices.add(element.index);
+        }
+      }
+    }
+  }
+  return Math.min(failedIndices.size, batchSize);
 }
 
 /** Decide whether an error is worth retrying (transient) vs. fatal (client error). */
@@ -425,9 +454,8 @@ async function uploadToGoogle(
 
   let batchesSent = 0;
   let accepted = 0;
-  // Google's offline job processes asynchronously server-side; per-record rejections aren't known
-  // synchronously here (see issue #3), so this stays 0 until partial-failure parsing lands.
-  const rejected = 0;
+  // Incremented per batch from parsed partial-failure details (see countFailedOperations).
+  let rejected = 0;
 
   // Dry-run: validate batching + payload shape without creating a job or hitting the network.
   if (app.dryRun) {
@@ -483,16 +511,18 @@ async function uploadToGoogle(
     );
 
     if (data.partialFailureError !== undefined) {
-      // Partial failure: some operations rejected. We can't know the exact count without parsing
-      // the detailed error, so conservatively count the batch as accepted-with-warnings.
+      // Partial failure: parse the detailed error to count exactly which operations were rejected.
+      const failed = countFailedOperations(data.partialFailureError, batch.length);
+      rejected += failed;
+      accepted += batch.length - failed;
       log(
         `[google] add-ops batch ${i + 1}/${batches.length} partial failure — ` +
-          `${data.partialFailureError.message ?? 'see Google Ads logs'}`,
+          `${failed}/${batch.length} rejected: ${data.partialFailureError.message ?? 'see Google Ads logs'}`,
       );
     } else {
+      accepted += batch.length;
       log(`[google] add-ops batch ${i + 1}/${batches.length} ok (${batch.length} users)`);
     }
-    accepted += batch.length;
     batchesSent += 1;
   }
 
