@@ -29,13 +29,13 @@ Most teams still sync audiences by hand. The workflow looks like this:
 
 Every step above is a **data-protection incident waiting to happen**:
 
-| Manual CSV workflow | Why it's dangerous |
-| --- | --- |
-| Raw PII written to a local file | The file persists in Downloads, Trash, Spotlight indexes, and backups — long after the upload. |
-| Shared over Slack / email / drives | PII is now copied across systems you don't control and can't reliably delete. |
-| Hashing done "later" (or never) | Many teams upload **un-hashed** emails, handing raw identities to a third party. |
-| Manual normalization | Inconsistent casing, whitespace, and country codes **tank your match rate**. |
-| Human-triggered, ad-hoc cadence | Audiences go stale; yesterday's buyers aren't in today's lookalike seed. |
+| Manual CSV workflow                | Why it's dangerous                                                                             |
+| ---------------------------------- | ---------------------------------------------------------------------------------------------- |
+| Raw PII written to a local file    | The file persists in Downloads, Trash, Spotlight indexes, and backups — long after the upload. |
+| Shared over Slack / email / drives | PII is now copied across systems you don't control and can't reliably delete.                  |
+| Hashing done "later" (or never)    | Many teams upload **un-hashed** emails, handing raw identities to a third party.               |
+| Manual normalization               | Inconsistent casing, whitespace, and country codes **tank your match rate**.                   |
+| Human-triggered, ad-hoc cadence    | Audiences go stale; yesterday's buyers aren't in today's lookalike seed.                       |
 
 **AudienceSync eliminates the file entirely.** Data is read from the source, normalized, hashed,
 and streamed to the ad platforms — all within a single process's memory. There is no CSV to leak,
@@ -191,61 +191,61 @@ All configuration is via environment variables (12-factor). `dotenv` auto-loads 
 
 ### Source
 
-| Variable | Default | Description |
-| --- | --- | --- |
-| `SOURCE_KIND` | `postgres` | One of `postgres`, `mysql`, `stripe`. |
-| `SOURCE_QUERY` | built-in | SQL with **two** placeholders bound to `[since, until)`. Postgres uses `$1/$2`; MySQL uses `?/?`. Must return columns: `email, phone, first_name, last_name, country, zip`. |
-| `PG_CONNECTION_STRING` | — | Required when `SOURCE_KIND=postgres`. |
-| `PG_SSL` | `true` | Enforce TLS with certificate verification. |
-| `MYSQL_CONNECTION_STRING` | — | Required when `SOURCE_KIND=mysql`. |
-| `MYSQL_SSL` | `true` | Enforce TLS. |
-| `STRIPE_API_KEY` | — | Required when `SOURCE_KIND=stripe`. |
-| `STRIPE_MODE` | `charges` | `charges` = customers charged in the window; `customers` = customers created in the window. |
+| Variable                  | Default    | Description                                                                                                                                                                 |
+| ------------------------- | ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `SOURCE_KIND`             | `postgres` | One of `postgres`, `mysql`, `stripe`.                                                                                                                                       |
+| `SOURCE_QUERY`            | built-in   | SQL with **two** placeholders bound to `[since, until)`. Postgres uses `$1/$2`; MySQL uses `?/?`. Must return columns: `email, phone, first_name, last_name, country, zip`. |
+| `PG_CONNECTION_STRING`    | —          | Required when `SOURCE_KIND=postgres`.                                                                                                                                       |
+| `PG_SSL`                  | `true`     | Enforce TLS with certificate verification.                                                                                                                                  |
+| `MYSQL_CONNECTION_STRING` | —          | Required when `SOURCE_KIND=mysql`.                                                                                                                                          |
+| `MYSQL_SSL`               | `true`     | Enforce TLS.                                                                                                                                                                |
+| `STRIPE_API_KEY`          | —          | Required when `SOURCE_KIND=stripe`.                                                                                                                                         |
+| `STRIPE_MODE`             | `charges`  | `charges` = customers charged in the window; `customers` = customers created in the window.                                                                                 |
 
 ### Window & resilience
 
-| Variable | Default | Description |
-| --- | --- | --- |
-| `LOOKBACK_HOURS` | `24` | Window size when `--since/--until` are omitted. |
-| `DEFAULT_COUNTRY` | `US` | ISO alpha-2 used to add a calling code to national phone numbers. |
-| `MAX_RETRIES` | `4` | Extra attempts per batch on transient errors. |
-| `RETRY_BASE_DELAY_MS` | `500` | Base for exponential backoff. |
-| `DRY_RUN` | `false` | Global dry-run toggle (also `--dry-run`). |
+| Variable              | Default | Description                                                       |
+| --------------------- | ------- | ----------------------------------------------------------------- |
+| `LOOKBACK_HOURS`      | `24`    | Window size when `--since/--until` are omitted.                   |
+| `DEFAULT_COUNTRY`     | `US`    | ISO alpha-2 used to add a calling code to national phone numbers. |
+| `MAX_RETRIES`         | `4`     | Extra attempts per batch on transient errors.                     |
+| `RETRY_BASE_DELAY_MS` | `500`   | Base for exponential backoff.                                     |
+| `DRY_RUN`             | `false` | Global dry-run toggle (also `--dry-run`).                         |
 
 ### Scheduler
 
-| Variable | Default | Description |
-| --- | --- | --- |
-| `CRON_SCHEDULE` | `0 2 * * *` | Standard 5-field cron expression. |
-| `CRON_TIMEZONE` | `UTC` | IANA timezone, e.g. `America/New_York`. |
+| Variable        | Default     | Description                             |
+| --------------- | ----------- | --------------------------------------- |
+| `CRON_SCHEDULE` | `0 2 * * *` | Standard 5-field cron expression.       |
+| `CRON_TIMEZONE` | `UTC`       | IANA timezone, e.g. `America/New_York`. |
 
 ### Meta destination
 
-| Variable | Default | Description |
-| --- | --- | --- |
-| `META_ENABLED` | `false` | Enable the Meta uploader. |
-| `META_ACCESS_TOKEN` | — | System-user token with `ads_management`. |
-| `META_AUDIENCE_ID` | — | The Custom Audience id. |
-| `META_API_VERSION` | `v21.0` | Graph API version. |
-| `META_BATCH_SIZE` | `1000` | Users per request (Meta caps at 10,000). |
+| Variable            | Default | Description                              |
+| ------------------- | ------- | ---------------------------------------- |
+| `META_ENABLED`      | `false` | Enable the Meta uploader.                |
+| `META_ACCESS_TOKEN` | —       | System-user token with `ads_management`. |
+| `META_AUDIENCE_ID`  | —       | The Custom Audience id.                  |
+| `META_API_VERSION`  | `v21.0` | Graph API version.                       |
+| `META_BATCH_SIZE`   | `1000`  | Users per request (Meta caps at 10,000). |
 
 ### Google destination
 
-| Variable | Default | Description |
-| --- | --- | --- |
-| `GOOGLE_ENABLED` | `false` | Enable the Google uploader. |
-| `GOOGLE_DEVELOPER_TOKEN` | — | Google Ads developer token. |
-| `GOOGLE_CUSTOMER_ID` | — | Ads customer id (digits only). |
-| `GOOGLE_USER_LIST_RESOURCE_NAME` | — | `customers/{cid}/userLists/{id}`. |
-| `GOOGLE_LOGIN_CUSTOMER_ID` | — | MCC login customer id (optional). |
-| `GOOGLE_API_VERSION` | `v17` | Google Ads API version. |
-| `GOOGLE_BATCH_SIZE` | `1000` | Identifiers per `addOperations` call. |
+| Variable                         | Default | Description                           |
+| -------------------------------- | ------- | ------------------------------------- |
+| `GOOGLE_ENABLED`                 | `false` | Enable the Google uploader.           |
+| `GOOGLE_DEVELOPER_TOKEN`         | —       | Google Ads developer token.           |
+| `GOOGLE_CUSTOMER_ID`             | —       | Ads customer id (digits only).        |
+| `GOOGLE_USER_LIST_RESOURCE_NAME` | —       | `customers/{cid}/userLists/{id}`.     |
+| `GOOGLE_LOGIN_CUSTOMER_ID`       | —       | MCC login customer id (optional).     |
+| `GOOGLE_API_VERSION`             | `v17`   | Google Ads API version.               |
+| `GOOGLE_BATCH_SIZE`              | `1000`  | Identifiers per `addOperations` call. |
 
 **Google auth — provide EITHER a static token OR refresh credentials:**
 
-| Variable | Description |
-| --- | --- |
-| `GOOGLE_ACCESS_TOKEN` | A pre-fetched OAuth2 Bearer token. **Expires in ~1 hour** — fine for a manual one-shot run, unsuitable for cron. |
+| Variable                                                             | Description                                                                                                                                             |
+| -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GOOGLE_ACCESS_TOKEN`                                                | A pre-fetched OAuth2 Bearer token. **Expires in ~1 hour** — fine for a manual one-shot run, unsuitable for cron.                                        |
 | `GOOGLE_REFRESH_TOKEN` + `GOOGLE_CLIENT_ID` + `GOOGLE_CLIENT_SECRET` | **Recommended for unattended cron.** AudienceSync exchanges these for a fresh access token on every run, so the scheduler never breaks on token expiry. |
 
 > At least one of `META_ENABLED` / `GOOGLE_ENABLED` must be `true`. When Google is enabled you must
@@ -286,9 +286,12 @@ Records with neither a usable email nor phone are dropped — they can't be matc
 ## 🧪 Development
 
 ```bash
-npm run dev        # tsup watch mode
-npm run typecheck  # tsc --noEmit, strict
-npm run build      # production bundle → dist/
+npm run dev          # tsup watch mode
+npm run typecheck    # tsc --noEmit, strict
+npm run lint         # ESLint (type-aware) — npm run lint:fix to autofix
+npm run format       # Prettier write — npm run format:check in CI
+npm test             # vitest
+npm run build        # production bundle → dist/
 ```
 
 Project layout:
@@ -306,7 +309,8 @@ src/
 
 ## 🤝 Contributing
 
-Issues and PRs are welcome. Please keep `npm run typecheck` green and never log raw PII.
+Issues and PRs are welcome. Please keep `npm run typecheck`, `npm run lint`, and `npm test` green,
+run `npm run format` before committing, and never log raw PII.
 
 ---
 

@@ -19,12 +19,7 @@
 
 import { createHash } from 'node:crypto';
 
-import type {
-  HashedCustomer,
-  NormalizedValue,
-  RawCustomer,
-  Sha256Hex,
-} from './types.js';
+import type { HashedCustomer, NormalizedValue, RawCustomer, Sha256Hex } from './types.js';
 
 /* ============================================================================================== *
  * Low-level helpers.
@@ -213,7 +208,10 @@ export function normalizeCountry(raw: string | null | undefined): NormalizedValu
   if (isBlank(raw)) {
     return undefined;
   }
-  const cleaned = raw.trim().toUpperCase().replace(/[^A-Z]/g, '');
+  const cleaned = raw
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z]/g, '');
   if (cleaned.length !== 2) {
     return undefined;
   }
