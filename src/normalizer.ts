@@ -285,7 +285,9 @@ export function hashCustomer(raw: RawCustomer): HashedCustomer | undefined {
     hashed.lastName = sha256Hex(lastNorm);
   }
   if (countryNorm !== undefined) {
+    // Meta wants the country hashed; Google wants it in plain text. Keep both.
     hashed.country = sha256Hex(countryNorm);
+    hashed.countryPlain = countryNorm;
   }
   if (zipNorm !== undefined) {
     hashed.zip = zipNorm;
