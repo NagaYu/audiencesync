@@ -8,7 +8,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/your-org/audiencesync/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/your-org/audiencesync/actions/workflows/ci.yml/badge.svg"></a>
+  <a href="https://github.com/NagaYu/audiencesync/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/NagaYu/audiencesync/actions/workflows/ci.yml/badge.svg"></a>
   <a href="#-license"><img alt="License: MIT" src="https://img.shields.io/badge/License-MIT-22c55e.svg"></a>
   <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-strict-3178c6.svg">
   <img alt="Node" src="https://img.shields.io/badge/Node-%E2%89%A518.17-339933.svg">
@@ -137,7 +137,7 @@ That's it. `audiencesync sync` will pull every customer whose `last_purchase_at`
 ## 🛠️ Installation
 
 ```bash
-git clone https://github.com/your-org/audiencesync.git
+git clone https://github.com/NagaYu/audiencesync.git
 cd audiencesync
 npm install
 npm run build      # compiles src/ → dist/ with tsup
