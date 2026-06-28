@@ -144,6 +144,12 @@ describe('hashCustomer', () => {
     expect(hashed?.country).toBe(refHash('US'));
   });
 
+  it('keeps country in both forms: hashed for Meta, plain ISO for Google', () => {
+    const hashed = hashCustomer({ email: 'a@b.com', country: ' us ' });
+    expect(hashed?.country).toBe(refHash('US')); // Meta column (hashed)
+    expect(hashed?.countryPlain).toBe('US'); // Google addressInfo.countryCode (plain)
+  });
+
   it('drops records with neither email nor phone', () => {
     expect(hashCustomer({ firstName: 'Jane' })).toBeUndefined();
     expect(hashCustomer({ email: 'not-an-email', phone: 'abc' })).toBeUndefined();

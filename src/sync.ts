@@ -248,7 +248,7 @@ function toGoogleIdentifiers(customer: HashedCustomer): GoogleUserIdentifier[] {
   if (
     customer.firstName !== undefined ||
     customer.lastName !== undefined ||
-    customer.country !== undefined ||
+    customer.countryPlain !== undefined ||
     customer.zip !== undefined
   ) {
     const addressInfo: NonNullable<GoogleUserIdentifier['addressInfo']> = {};
@@ -258,10 +258,10 @@ function toGoogleIdentifiers(customer: HashedCustomer): GoogleUserIdentifier[] {
     if (customer.lastName !== undefined) {
       Object.assign(addressInfo, { hashedLastName: customer.lastName });
     }
-    if (customer.country !== undefined) {
-      // Google's addressInfo.countryCode is plain ISO; we don't have plain country here (it was
-      // hashed for Meta parity), so only emit when present as a hash is not valid. Skip to stay
-      // spec-compliant — country/zip address matching still works via zip below.
+    if (customer.countryPlain !== undefined) {
+      // Google's addressInfo.countryCode is plain-text ISO alpha-2 (NOT hashed). We carry the plain
+      // value in `countryPlain` precisely so address matching includes the country.
+      Object.assign(addressInfo, { countryCode: customer.countryPlain });
     }
     if (customer.zip !== undefined) {
       Object.assign(addressInfo, { postalCode: customer.zip });

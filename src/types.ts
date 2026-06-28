@@ -58,7 +58,14 @@ export interface HashedCustomer {
   readonly phone?: Sha256Hex;
   readonly firstName?: Sha256Hex;
   readonly lastName?: Sha256Hex;
+  /** Hashed ISO alpha-2 country, used by Meta (which hashes the COUNTRY column). */
   readonly country?: Sha256Hex;
+  /**
+   * Plain (un-hashed) ISO alpha-2 country. Google's `addressInfo.countryCode` must be plain text,
+   * not hashed, so we keep both representations: `country` (hashed) for Meta, `countryPlain` for
+   * Google. Country is not PII on its own, so retaining it in the clear is safe.
+   */
+  readonly countryPlain?: string;
   /** Google permits postal code in plain text (not hashed). Undefined when absent. */
   readonly zip?: string;
 }
