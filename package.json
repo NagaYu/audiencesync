@@ -1,0 +1,85 @@
+{
+  "name": "audiencesync",
+  "version": "1.0.0",
+  "description": "Secure, in-memory Reverse ETL that extracts high-value customers from your database or Stripe, hashes their PII with SHA-256, and syncs them to Meta Custom Audiences and Google Customer Match — no CSV files, ever.",
+  "keywords": [
+    "reverse-etl",
+    "customer-match",
+    "custom-audience",
+    "meta-ads",
+    "google-ads",
+    "martech",
+    "audience-sync",
+    "pii-hashing",
+    "sha256",
+    "etl",
+    "stripe",
+    "postgres",
+    "mysql"
+  ],
+  "license": "MIT",
+  "author": "AudienceSync Contributors",
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "audiencesync": "./dist/index.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=18.17.0"
+  },
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "start": "node dist/index.js",
+    "sync": "node dist/index.js sync",
+    "schedule": "node dist/index.js schedule",
+    "typecheck": "tsc --noEmit",
+    "lint": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "clean": "rimraf dist",
+    "prepublishOnly": "npm run clean && npm run build"
+  },
+  "dependencies": {
+    "axios": "^1.7.7",
+    "commander": "^12.1.0",
+    "dotenv": "^16.4.5",
+    "mysql2": "^3.11.3",
+    "node-cron": "^3.0.3",
+    "pg": "^8.13.0",
+    "stripe": "^16.12.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.7.4",
+    "@types/node-cron": "^3.0.11",
+    "@types/pg": "^8.11.10",
+    "rimraf": "^6.0.1",
+    "tsup": "^8.3.0",
+    "typescript": "^5.6.2",
+    "vitest": "^2.1.2"
+  },
+  "tsup": {
+    "entry": [
+      "src/index.ts"
+    ],
+    "format": [
+      "esm"
+    ],
+    "target": "es2022",
+    "platform": "node",
+    "sourcemap": true,
+    "clean": true,
+    "dts": true,
+    "shims": true,
+    "banner": {
+      "js": "#!/usr/bin/env node"
+    }
+  }
+}

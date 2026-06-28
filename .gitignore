@@ -1,0 +1,92 @@
+# ---------------------------------------------------------------------------
+# Dependencies
+# ---------------------------------------------------------------------------
+node_modules/
+.pnp/
+.pnp.js
+.yarn/cache/
+.yarn/unplugged/
+jspm_packages/
+
+# ---------------------------------------------------------------------------
+# Build output
+# ---------------------------------------------------------------------------
+dist/
+build/
+out/
+*.tsbuildinfo
+.tsup/
+
+# ---------------------------------------------------------------------------
+# Secrets & environment — NEVER commit these
+# ---------------------------------------------------------------------------
+.env
+.env.*
+!.env.example
+*.local
+
+# Credentials / connection certificates / keys
+*.pem
+*.key
+*.crt
+*.cert
+*.cer
+*.p12
+*.pfx
+*.der
+*.keystore
+*.jks
+secrets/
+credentials/
+service-account*.json
+gcloud-*.json
+google-credentials*.json
+
+# Accidental PII exports — defense in depth (this tool never writes these,
+# but block them so a stray manual export can never be committed)
+*.csv
+*.tsv
+audience-*.json
+customers-*.json
+export-*.ndjson
+
+# ---------------------------------------------------------------------------
+# Logs
+# ---------------------------------------------------------------------------
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ---------------------------------------------------------------------------
+# Runtime / process managers
+# ---------------------------------------------------------------------------
+pids/
+*.pid
+*.seed
+*.pid.lock
+.pm2/
+
+# ---------------------------------------------------------------------------
+# Coverage / test artifacts
+# ---------------------------------------------------------------------------
+coverage/
+.nyc_output/
+
+# ---------------------------------------------------------------------------
+# Tooling / session-specific
+# ---------------------------------------------------------------------------
+.claude/
+
+# ---------------------------------------------------------------------------
+# Editor / OS noise
+# ---------------------------------------------------------------------------
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
