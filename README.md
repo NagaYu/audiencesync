@@ -310,7 +310,9 @@ src/
 ## 🤝 Contributing
 
 Issues and PRs are welcome. Please keep `npm run typecheck`, `npm run lint`, and `npm test` green,
-run `npm run format` before committing, and never log raw PII.
+run `npm run format` before committing, and never log raw PII. See
+[CONTRIBUTING.md](CONTRIBUTING.md) for the full guide and [CHANGELOG.md](CHANGELOG.md) for the
+release history.
 
 ---
 
