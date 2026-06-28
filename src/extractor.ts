@@ -147,8 +147,7 @@ async function resolveStripeCustomer(
     if ('deleted' in customerRef && customerRef.deleted) {
       return fallbackEmail === null ? null : { email: fallbackEmail };
     }
-    const cust = customerRef as Stripe.Customer;
-    return stripeCustomerToRaw(cust, fallbackEmail);
+    return stripeCustomerToRaw(customerRef, fallbackEmail);
   }
 
   // Only an id — retrieve the full object.
@@ -214,7 +213,7 @@ async function extractFromStripe(
       if (customer.deleted) {
         continue;
       }
-      const raw = stripeCustomerToRaw(customer as Stripe.Customer, null);
+      const raw = stripeCustomerToRaw(customer, null);
       const key = String(raw.id ?? raw.email ?? '');
       if (key.length > 0 && seen.has(key)) {
         continue;

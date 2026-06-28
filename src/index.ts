@@ -22,12 +22,7 @@ import cron from 'node-cron';
 import { extractCustomers } from './extractor.js';
 import { hashCustomers } from './normalizer.js';
 import { syncToDestinations } from './sync.js';
-import type {
-  AppConfig,
-  SourceConfig,
-  SyncRunResult,
-  SyncWindow,
-} from './types.js';
+import type { AppConfig, SourceConfig, SyncRunResult, SyncWindow } from './types.js';
 
 /* ============================================================================================== *
  * Logging — timestamped, structured, PII-free.
@@ -141,9 +136,7 @@ function resolveConfig(overrides: { dryRun?: boolean }): AppConfig {
   const googleEnabled = envBool('GOOGLE_ENABLED', false);
 
   if (!metaEnabled && !googleEnabled) {
-    throw new Error(
-      'No destination enabled. Set META_ENABLED=true and/or GOOGLE_ENABLED=true.',
-    );
+    throw new Error('No destination enabled. Set META_ENABLED=true and/or GOOGLE_ENABLED=true.');
   }
 
   if (googleEnabled) {
@@ -213,10 +206,7 @@ function resolveConfig(overrides: { dryRun?: boolean }): AppConfig {
  * Compute the extraction window. When `--since`/`--until` are not given, the window is the last
  * `lookbackHours` ending now (e.g. 24h ⇒ "yesterday → now").
  */
-function resolveWindow(
-  config: AppConfig,
-  opts: { since?: string; until?: string },
-): SyncWindow {
+function resolveWindow(config: AppConfig, opts: { since?: string; until?: string }): SyncWindow {
   const until = opts.until !== undefined ? new Date(opts.until) : new Date();
   if (Number.isNaN(until.getTime())) {
     throw new Error(`Invalid --until date: ${opts.until}`);
@@ -233,7 +223,9 @@ function resolveWindow(
   }
 
   if (since.getTime() >= until.getTime()) {
-    throw new Error(`Window is empty: since (${since.toISOString()}) >= until (${until.toISOString()})`);
+    throw new Error(
+      `Window is empty: since (${since.toISOString()}) >= until (${until.toISOString()})`,
+    );
   }
 
   return { since, until };
@@ -409,7 +401,7 @@ program
   .command('schedule')
   .description('Run sync repeatedly on CRON_SCHEDULE (long-lived process).')
   .addOption(new Option('--dry-run', 'Extract + hash but do not upload.').default(false))
-  .action(async (opts: { dryRun: boolean }) => {
+  .action((opts: { dryRun: boolean }) => {
     let config: AppConfig;
     try {
       config = resolveConfig({ dryRun: opts.dryRun });
@@ -431,25 +423,26 @@ program
     );
 
     let running = false;
-    const task = cron.schedule(
-      config.cronSchedule,
-      async () => {
-        if (running) {
-          warn('Previous run still in progress — skipping this tick.');
-          return;
-        }
-        running = true;
-        try {
-          const window = resolveWindow(config, {});
-          await runSync(config, window);
-        } catch (err: unknown) {
-          error(err instanceof Error ? err.message : String(err));
-        } finally {
-          running = false;
-        }
-      },
-      { timezone: config.cronTimezone },
-    );
+    const tick = async (): Promise<void> => {
+      if (running) {
+        warn('Previous run still in progress — skipping this tick.');
+        return;
+      }
+      running = true;
+      try {
+        const window = resolveWindow(config, {});
+        await runSync(config, window);
+      } catch (err: unknown) {
+        error(err instanceof Error ? err.message : String(err));
+      } finally {
+        running = false;
+      }
+    };
+
+    // cron's callback signature is void-returning; fire-and-forget the async tick explicitly.
+    const task = cron.schedule(config.cronSchedule, () => void tick(), {
+      timezone: config.cronTimezone,
+    });
 
     const shutdown = (signal: string): void => {
       info(`Received ${signal} — stopping scheduler.`);

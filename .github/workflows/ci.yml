@@ -40,6 +40,12 @@ jobs:
       - name: Typecheck (tsc --strict)
         run: npm run typecheck
 
+      - name: Lint (ESLint)
+        run: npm run lint
+
+      - name: Format check (Prettier)
+        run: npm run format:check
+
       - name: Test (vitest)
         run: npm test
 

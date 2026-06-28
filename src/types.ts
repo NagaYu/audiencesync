@@ -82,13 +82,7 @@ export type Platform = 'meta' | 'google';
  * ---------------------------------------------------------------------------------------------- */
 
 /** Meta's user-data schema keys (the order maps positionally to each `data` row). */
-export type MetaSchemaKey =
-  | 'EMAIL'
-  | 'PHONE'
-  | 'FN'
-  | 'LN'
-  | 'COUNTRY'
-  | 'ZIP';
+export type MetaSchemaKey = 'EMAIL' | 'PHONE' | 'FN' | 'LN' | 'COUNTRY' | 'ZIP';
 
 /** A single Meta audience "users" replace/add request body. */
 export interface MetaUsersPayload {

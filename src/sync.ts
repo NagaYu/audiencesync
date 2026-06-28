@@ -134,10 +134,11 @@ const META_SCHEMA: readonly MetaSchemaKey[] = ['EMAIL', 'PHONE', 'FN', 'LN', 'CO
  * columns. Zip is hashed for Meta (unlike Google, which wants it in plain text).
  */
 function toMetaRow(customer: HashedCustomer): string[] {
-  const zipHashed: Sha256Hex | '' = customer.zip !== undefined
-    ? // Meta wants ZIP hashed; we hash the already-normalized plain zip here.
-      (createHash('sha256').update(customer.zip, 'utf8').digest('hex') as Sha256Hex)
-    : '';
+  const zipHashed: Sha256Hex | '' =
+    customer.zip !== undefined
+      ? // Meta wants ZIP hashed; we hash the already-normalized plain zip here.
+        (createHash('sha256').update(customer.zip, 'utf8').digest('hex') as Sha256Hex)
+      : '';
 
   return [
     customer.email ?? '',
@@ -212,9 +213,7 @@ async function uploadToMeta(
     accepted += Math.max(0, received - invalid);
     rejected += invalid;
     batchesSent += 1;
-    log(
-      `[meta] batch ${i + 1}/${batches.length} ok — received=${received} invalid=${invalid}`,
-    );
+    log(`[meta] batch ${i + 1}/${batches.length} ok — received=${received} invalid=${invalid}`);
   }
 
   return {
@@ -308,7 +307,9 @@ async function createGoogleJob(
     app.maxRetries,
     app.retryBaseDelayMs,
     (attempt, delay, error) => {
-      log(`[google] create-job attempt ${attempt} failed, retrying in ${delay}ms — ${describeError(error)}`);
+      log(
+        `[google] create-job attempt ${attempt} failed, retrying in ${delay}ms — ${describeError(error)}`,
+      );
     },
   );
 
@@ -317,7 +318,10 @@ async function createGoogleJob(
 }
 
 /** Standard headers for Google Ads API calls, using an already-resolved access token. */
-function googleHeaders(config: GoogleDestinationConfig, accessToken: string): Record<string, string> {
+function googleHeaders(
+  config: GoogleDestinationConfig,
+  accessToken: string,
+): Record<string, string> {
   const headers: Record<string, string> = {
     Authorization: `Bearer ${accessToken}`,
     'developer-token': config.developerToken,
@@ -366,11 +370,12 @@ async function resolveGoogleAccessToken(
   }
 
   // URL-encoded form body for the OAuth2 token endpoint.
+  // After the `hasRefreshCreds` guard above, TS narrows these three to non-undefined strings.
   const form = new URLSearchParams({
     grant_type: 'refresh_token',
-    refresh_token: config.refreshToken as string,
-    client_id: config.clientId as string,
-    client_secret: config.clientSecret as string,
+    refresh_token: config.refreshToken,
+    client_id: config.clientId,
+    client_secret: config.clientSecret,
   });
 
   const token = await withRetry<string>(
@@ -388,7 +393,9 @@ async function resolveGoogleAccessToken(
     app.maxRetries,
     app.retryBaseDelayMs,
     (attempt, delay, error) => {
-      log(`[google] token-refresh attempt ${attempt} failed, retrying in ${delay}ms — ${describeError(error)}`);
+      log(
+        `[google] token-refresh attempt ${attempt} failed, retrying in ${delay}ms — ${describeError(error)}`,
+      );
     },
   );
 
@@ -418,7 +425,9 @@ async function uploadToGoogle(
 
   let batchesSent = 0;
   let accepted = 0;
-  let rejected = 0;
+  // Google's offline job processes asynchronously server-side; per-record rejections aren't known
+  // synchronously here (see issue #3), so this stays 0 until partial-failure parsing lands.
+  const rejected = 0;
 
   // Dry-run: validate batching + payload shape without creating a job or hitting the network.
   if (app.dryRun) {
@@ -445,8 +454,7 @@ async function uploadToGoogle(
   const jobResourceName = await createGoogleJob(http, config, accessToken, app, log);
 
   // 2) Add operations in batches.
-  const addUrl =
-    `https://googleads.googleapis.com/${config.apiVersion}/${jobResourceName}:addOperations`;
+  const addUrl = `https://googleads.googleapis.com/${config.apiVersion}/${jobResourceName}:addOperations`;
 
   for (let i = 0; i < batches.length; i += 1) {
     const batch = batches[i]!;
@@ -489,17 +497,22 @@ async function uploadToGoogle(
   }
 
   // 3) Run the job to begin asynchronous server-side processing.
-  const runUrl =
-    `https://googleads.googleapis.com/${config.apiVersion}/${jobResourceName}:run`;
+  const runUrl = `https://googleads.googleapis.com/${config.apiVersion}/${jobResourceName}:run`;
   await withRetry<unknown>(
     async () => {
-      const res = await http.post<unknown>(runUrl, {}, { headers: googleHeaders(config, accessToken) });
+      const res = await http.post<unknown>(
+        runUrl,
+        {},
+        { headers: googleHeaders(config, accessToken) },
+      );
       return res.data;
     },
     app.maxRetries,
     app.retryBaseDelayMs,
     (attempt, delay, error) => {
-      log(`[google] run-job attempt ${attempt} failed, retrying in ${delay}ms — ${describeError(error)}`);
+      log(
+        `[google] run-job attempt ${attempt} failed, retrying in ${delay}ms — ${describeError(error)}`,
+      );
     },
   );
   log(`[google] job ${jobResourceName} submitted for processing`);
