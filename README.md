@@ -47,6 +47,10 @@ because there is no CSV.
 
 - **🔒 In-memory, file-free by design.** No CSV, no temp file, no staging table. PII exists only as
   transient values in RAM and leaves the process exclusively as **SHA-256 digests**.
+- **🌊 Streaming, bounded memory.** Sources are read through server-side cursors (Postgres/MySQL) and
+  lazy pagination (Stripe), then processed extract → hash → upload one batch at a time. The full
+  audience is **never materialized at once**, so peak memory stays flat whether you sync 10 K or
+  10 M records.
 - **🧼 Platform-perfect normalization.** Emails and phone numbers are cleaned to the exact spec Meta
   and Google publish (trim → lowercase → E.164 country code) so your match rate is maximized.
 - **📦 Smart batching + retries.** Records are chunked to each platform's limit and uploaded

@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Streaming extraction with bounded memory: PostgreSQL/MySQL use server-side cursors
+  (`pg-query-stream` / mysql2 row streams) and Stripe uses lazy pagination. The pipeline now runs
+  extract → hash → upload one batch at a time via a `SyncSession`, so the full audience is never
+  materialized in memory.
 - Google Customer Match now sends a plain-text `countryCode` in `addressInfo`, so country
   participates in address matching (while Meta continues to receive the hashed country column).
 - Accurate Google partial-failure accounting: `recordsAccepted` / `recordsRejected` are now derived

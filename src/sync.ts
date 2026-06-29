@@ -179,80 +179,52 @@ function toMetaRow(customer: HashedCustomer): string[] {
   ];
 }
 
-async function uploadToMeta(
+/** Outcome of uploading a single batch: how many records the platform accepted vs. rejected. */
+interface BatchOutcome {
+  readonly accepted: number;
+  readonly rejected: number;
+}
+
+/**
+ * Upload one Meta batch (already sized to <= config.batchSize) to the Custom Audience. Retries
+ * transient failures and reports the accepted/rejected split from Meta's response.
+ */
+async function sendMetaBatch(
   http: AxiosInstance,
   config: MetaDestinationConfig,
-  customers: readonly HashedCustomer[],
+  batch: readonly HashedCustomer[],
+  label: string,
   app: AppConfig,
   log: (msg: string) => void,
-): Promise<PlatformSyncResult> {
-  if (!config.enabled) {
-    return {
-      platform: 'meta',
-      enabled: false,
-      batchesSent: 0,
-      recordsAccepted: 0,
-      recordsRejected: 0,
-      skipped: true,
-    };
-  }
-
+): Promise<BatchOutcome> {
   const url = `https://graph.facebook.com/${config.apiVersion}/${config.audienceId}/users`;
-  const batches = chunk(customers, config.batchSize);
-
-  let batchesSent = 0;
-  let accepted = 0;
-  let rejected = 0;
-
-  for (let i = 0; i < batches.length; i += 1) {
-    const batch = batches[i]!;
-    const body: MetaUsersRequest = {
-      payload: {
-        schema: META_SCHEMA,
-        data: batch.map(toMetaRow),
-      },
-    };
-
-    if (app.dryRun) {
-      log(`[meta] (dry-run) would POST batch ${i + 1}/${batches.length} (${batch.length} users)`);
-      batchesSent += 1;
-      accepted += batch.length;
-      continue;
-    }
-
-    const response = await withRetry<MetaUsersResponse>(
-      async () => {
-        const res = await http.post<MetaUsersResponse>(url, body, {
-          params: { access_token: config.accessToken },
-        });
-        return res.data;
-      },
-      app.maxRetries,
-      app.retryBaseDelayMs,
-      (attempt, delay, error) => {
-        log(
-          `[meta] batch ${i + 1}/${batches.length} attempt ${attempt} failed, ` +
-            `retrying in ${delay}ms — ${describeError(error)}`,
-        );
-      },
-    );
-
-    const received = response.num_received ?? batch.length;
-    const invalid = response.num_invalid_entries ?? 0;
-    accepted += Math.max(0, received - invalid);
-    rejected += invalid;
-    batchesSent += 1;
-    log(`[meta] batch ${i + 1}/${batches.length} ok — received=${received} invalid=${invalid}`);
-  }
-
-  return {
-    platform: 'meta',
-    enabled: true,
-    batchesSent,
-    recordsAccepted: accepted,
-    recordsRejected: rejected,
-    skipped: false,
+  const body: MetaUsersRequest = {
+    payload: {
+      schema: META_SCHEMA,
+      data: batch.map(toMetaRow),
+    },
   };
+
+  const response = await withRetry<MetaUsersResponse>(
+    async () => {
+      const res = await http.post<MetaUsersResponse>(url, body, {
+        params: { access_token: config.accessToken },
+      });
+      return res.data;
+    },
+    app.maxRetries,
+    app.retryBaseDelayMs,
+    (attempt, delay, error) => {
+      log(
+        `[meta] ${label} attempt ${attempt} failed, retrying in ${delay}ms — ${describeError(error)}`,
+      );
+    },
+  );
+
+  const received = response.num_received ?? batch.length;
+  const invalid = response.num_invalid_entries ?? 0;
+  log(`[meta] ${label} ok — received=${received} invalid=${invalid}`);
+  return { accepted: Math.max(0, received - invalid), rejected: invalid };
 }
 
 /* ============================================================================================== *
@@ -432,101 +404,66 @@ async function resolveGoogleAccessToken(
   return token;
 }
 
-async function uploadToGoogle(
+/**
+ * Add one Google batch (already sized to <= config.batchSize) of operations to an existing offline
+ * user data job. Retries transient failures and reports the accepted/rejected split parsed from any
+ * partial-failure error.
+ */
+async function addGoogleOperations(
   http: AxiosInstance,
   config: GoogleDestinationConfig,
-  customers: readonly HashedCustomer[],
+  accessToken: string,
+  jobResourceName: string,
+  batch: readonly HashedCustomer[],
+  label: string,
   app: AppConfig,
   log: (msg: string) => void,
-): Promise<PlatformSyncResult> {
-  if (!config.enabled) {
-    return {
-      platform: 'google',
-      enabled: false,
-      batchesSent: 0,
-      recordsAccepted: 0,
-      recordsRejected: 0,
-      skipped: true,
-    };
-  }
-
-  const batches = chunk(customers, config.batchSize);
-
-  let batchesSent = 0;
-  let accepted = 0;
-  // Incremented per batch from parsed partial-failure details (see countFailedOperations).
-  let rejected = 0;
-
-  // Dry-run: validate batching + payload shape without creating a job or hitting the network.
-  if (app.dryRun) {
-    for (let i = 0; i < batches.length; i += 1) {
-      const batch = batches[i]!;
-      log(`[google] (dry-run) would add batch ${i + 1}/${batches.length} (${batch.length} users)`);
-      batchesSent += 1;
-      accepted += batch.length;
-    }
-    return {
-      platform: 'google',
-      enabled: true,
-      batchesSent,
-      recordsAccepted: accepted,
-      recordsRejected: rejected,
-      skipped: false,
-    };
-  }
-
-  // 0) Resolve a fresh access token (refresh_token exchange when configured).
-  const accessToken = await resolveGoogleAccessToken(http, config, app, log);
-
-  // 1) Create the job.
-  const jobResourceName = await createGoogleJob(http, config, accessToken, app, log);
-
-  // 2) Add operations in batches.
+): Promise<BatchOutcome> {
   const addUrl = `https://googleads.googleapis.com/${config.apiVersion}/${jobResourceName}:addOperations`;
+  const body: GoogleAddOperationsRequest = {
+    enablePartialFailure: true,
+    operations: batch.map((customer) => ({
+      create: { userIdentifiers: toGoogleIdentifiers(customer) },
+    })),
+  };
 
-  for (let i = 0; i < batches.length; i += 1) {
-    const batch = batches[i]!;
-    const body: GoogleAddOperationsRequest = {
-      enablePartialFailure: true,
-      operations: batch.map((customer) => ({
-        create: { userIdentifiers: toGoogleIdentifiers(customer) },
-      })),
-    };
-
-    const data = await withRetry<GoogleAddOperationsResponse>(
-      async () => {
-        const res = await http.post<GoogleAddOperationsResponse>(addUrl, body, {
-          headers: googleHeaders(config, accessToken),
-        });
-        return res.data;
-      },
-      app.maxRetries,
-      app.retryBaseDelayMs,
-      (attempt, delay, error) => {
-        log(
-          `[google] add-ops batch ${i + 1}/${batches.length} attempt ${attempt} failed, ` +
-            `retrying in ${delay}ms — ${describeError(error)}`,
-        );
-      },
-    );
-
-    if (data.partialFailureError !== undefined) {
-      // Partial failure: parse the detailed error to count exactly which operations were rejected.
-      const failed = countFailedOperations(data.partialFailureError, batch.length);
-      rejected += failed;
-      accepted += batch.length - failed;
+  const data = await withRetry<GoogleAddOperationsResponse>(
+    async () => {
+      const res = await http.post<GoogleAddOperationsResponse>(addUrl, body, {
+        headers: googleHeaders(config, accessToken),
+      });
+      return res.data;
+    },
+    app.maxRetries,
+    app.retryBaseDelayMs,
+    (attempt, delay, error) => {
       log(
-        `[google] add-ops batch ${i + 1}/${batches.length} partial failure — ` +
-          `${failed}/${batch.length} rejected: ${data.partialFailureError.message ?? 'see Google Ads logs'}`,
+        `[google] ${label} attempt ${attempt} failed, retrying in ${delay}ms — ${describeError(error)}`,
       );
-    } else {
-      accepted += batch.length;
-      log(`[google] add-ops batch ${i + 1}/${batches.length} ok (${batch.length} users)`);
-    }
-    batchesSent += 1;
-  }
+    },
+  );
 
-  // 3) Run the job to begin asynchronous server-side processing.
+  if (data.partialFailureError !== undefined) {
+    const failed = countFailedOperations(data.partialFailureError, batch.length);
+    log(
+      `[google] ${label} partial failure — ${failed}/${batch.length} rejected: ` +
+        `${data.partialFailureError.message ?? 'see Google Ads logs'}`,
+    );
+    return { accepted: batch.length - failed, rejected: failed };
+  }
+  log(`[google] ${label} ok (${batch.length} users)`);
+  return { accepted: batch.length, rejected: 0 };
+}
+
+/** Run an offline user data job to begin asynchronous server-side processing. */
+async function runGoogleJob(
+  http: AxiosInstance,
+  config: GoogleDestinationConfig,
+  accessToken: string,
+  jobResourceName: string,
+  app: AppConfig,
+  log: (msg: string) => void,
+): Promise<void> {
   const runUrl = `https://googleads.googleapis.com/${config.apiVersion}/${jobResourceName}:run`;
   await withRetry<unknown>(
     async () => {
@@ -546,30 +483,41 @@ async function uploadToGoogle(
     },
   );
   log(`[google] job ${jobResourceName} submitted for processing`);
-
-  return {
-    platform: 'google',
-    enabled: true,
-    batchesSent,
-    recordsAccepted: accepted,
-    recordsRejected: rejected,
-    skipped: false,
-  };
 }
 
 /* ============================================================================================== *
- * Public sync orchestrator.
+ * Public streaming sync session.
  * ============================================================================================== */
 
+/** Mutable per-platform accumulator used while streaming batches through a session. */
+interface PlatformState {
+  batchesSent: number;
+  accepted: number;
+  rejected: number;
+  failed: boolean;
+  error: string | undefined;
+}
+
+function newPlatformState(): PlatformState {
+  return { batchesSent: 0, accepted: 0, rejected: 0, failed: false, error: undefined };
+}
+
 /**
- * Push hashed customers to every enabled destination. Meta and Google run concurrently; a failure
- * in one is captured per-platform and does not abort the other. Returns one result per platform.
+ * A streaming upload session. Feed it hashed batches as they are produced from the source stream;
+ * each batch is fanned out to every enabled destination (further sub-chunked to each platform's own
+ * limit). Google's offline job is created lazily on the first batch and run on {@link finalize}.
+ *
+ * A failure in one platform is captured and stops further sends to that platform only — the other
+ * keeps going, and the source stream is never aborted.
  */
-export async function syncToDestinations(
-  customers: readonly HashedCustomer[],
-  app: AppConfig,
-  log: (msg: string) => void,
-): Promise<PlatformSyncResult[]> {
+export interface SyncSession {
+  /** Upload one hashed batch to all enabled destinations. */
+  send(batch: readonly HashedCustomer[]): Promise<void>;
+  /** Finish the run (run the Google job) and return one result per platform. */
+  finalize(): Promise<PlatformSyncResult[]>;
+}
+
+export function createSyncSession(app: AppConfig, log: (msg: string) => void): SyncSession {
   const http = axios.create({
     timeout: 30_000,
     // Validate ourselves so non-2xx responses surface as errors for the retry layer.
@@ -577,30 +525,143 @@ export async function syncToDestinations(
     headers: { 'User-Agent': 'AudienceSync/1.0' },
   });
 
-  const tasks: Array<Promise<PlatformSyncResult>> = [
-    uploadToMeta(http, app.destinations.meta, customers, app, log).catch(
-      (error: unknown): PlatformSyncResult => ({
-        platform: 'meta',
-        enabled: app.destinations.meta.enabled,
-        batchesSent: 0,
-        recordsAccepted: 0,
-        recordsRejected: 0,
-        skipped: false,
-        error: describeError(error),
-      }),
-    ),
-    uploadToGoogle(http, app.destinations.google, customers, app, log).catch(
-      (error: unknown): PlatformSyncResult => ({
-        platform: 'google',
-        enabled: app.destinations.google.enabled,
-        batchesSent: 0,
-        recordsAccepted: 0,
-        recordsRejected: 0,
-        skipped: false,
-        error: describeError(error),
-      }),
-    ),
-  ];
+  const meta = app.destinations.meta;
+  const google = app.destinations.google;
+  const metaState = newPlatformState();
+  const googleState = newPlatformState();
 
-  return Promise.all(tasks);
+  // Lazily-established Google job context (created on the first non-dry-run batch).
+  let googleAccessToken: string | undefined;
+  let googleJobResourceName: string | undefined;
+
+  let metaBatchCounter = 0;
+  let googleBatchCounter = 0;
+
+  async function ensureGoogleJob(): Promise<void> {
+    if (googleJobResourceName !== undefined) {
+      return;
+    }
+    googleAccessToken = await resolveGoogleAccessToken(http, google, app, log);
+    googleJobResourceName = await createGoogleJob(http, google, googleAccessToken, app, log);
+  }
+
+  async function sendToMeta(batch: readonly HashedCustomer[]): Promise<void> {
+    if (!meta.enabled || metaState.failed) {
+      return;
+    }
+    try {
+      for (const sub of chunk(batch, meta.batchSize)) {
+        metaBatchCounter += 1;
+        const label = `batch #${metaBatchCounter}`;
+        if (app.dryRun) {
+          log(`[meta] (dry-run) would POST ${label} (${sub.length} users)`);
+          metaState.accepted += sub.length;
+        } else {
+          const outcome = await sendMetaBatch(http, meta, sub, label, app, log);
+          metaState.accepted += outcome.accepted;
+          metaState.rejected += outcome.rejected;
+        }
+        metaState.batchesSent += 1;
+      }
+    } catch (error: unknown) {
+      metaState.failed = true;
+      metaState.error = describeError(error);
+      log(`[meta] aborting after error — ${metaState.error}`);
+    }
+  }
+
+  async function sendToGoogle(batch: readonly HashedCustomer[]): Promise<void> {
+    if (!google.enabled || googleState.failed) {
+      return;
+    }
+    try {
+      if (!app.dryRun) {
+        await ensureGoogleJob();
+      }
+      for (const sub of chunk(batch, google.batchSize)) {
+        googleBatchCounter += 1;
+        const label = `batch #${googleBatchCounter}`;
+        if (app.dryRun) {
+          log(`[google] (dry-run) would add ${label} (${sub.length} users)`);
+          googleState.accepted += sub.length;
+        } else {
+          const outcome = await addGoogleOperations(
+            http,
+            google,
+            googleAccessToken!,
+            googleJobResourceName!,
+            sub,
+            label,
+            app,
+            log,
+          );
+          googleState.accepted += outcome.accepted;
+          googleState.rejected += outcome.rejected;
+        }
+        googleState.batchesSent += 1;
+      }
+    } catch (error: unknown) {
+      googleState.failed = true;
+      googleState.error = describeError(error);
+      log(`[google] aborting after error — ${googleState.error}`);
+    }
+  }
+
+  function toResult(
+    platform: 'meta' | 'google',
+    enabled: boolean,
+    state: PlatformState,
+  ): PlatformSyncResult {
+    if (!enabled) {
+      return {
+        platform,
+        enabled: false,
+        batchesSent: 0,
+        recordsAccepted: 0,
+        recordsRejected: 0,
+        skipped: true,
+      };
+    }
+    const base: PlatformSyncResult = {
+      platform,
+      enabled: true,
+      batchesSent: state.batchesSent,
+      recordsAccepted: state.accepted,
+      recordsRejected: state.rejected,
+      skipped: false,
+    };
+    return state.error !== undefined ? { ...base, error: state.error } : base;
+  }
+
+  return {
+    async send(batch: readonly HashedCustomer[]): Promise<void> {
+      if (batch.length === 0) {
+        return;
+      }
+      // Fan out to both platforms concurrently; each captures its own errors.
+      await Promise.all([sendToMeta(batch), sendToGoogle(batch)]);
+    },
+
+    async finalize(): Promise<PlatformSyncResult[]> {
+      // Run the Google job iff it was created (i.e. at least one real batch was added) and healthy.
+      if (
+        google.enabled &&
+        !googleState.failed &&
+        !app.dryRun &&
+        googleJobResourceName !== undefined &&
+        googleAccessToken !== undefined
+      ) {
+        try {
+          await runGoogleJob(http, google, googleAccessToken, googleJobResourceName, app, log);
+        } catch (error: unknown) {
+          googleState.failed = true;
+          googleState.error = describeError(error);
+        }
+      }
+      return [
+        toResult('meta', meta.enabled, metaState),
+        toResult('google', google.enabled, googleState),
+      ];
+    },
+  };
 }
