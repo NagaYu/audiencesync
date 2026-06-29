@@ -19,9 +19,9 @@ import { Command, Option } from 'commander';
 import 'dotenv/config';
 import cron from 'node-cron';
 
-import { extractCustomers } from './extractor.js';
+import { batchAsync, streamCustomers } from './extractor.js';
 import { hashCustomers } from './normalizer.js';
-import { syncToDestinations } from './sync.js';
+import { createSyncSession } from './sync.js';
 import type { AppConfig, SourceConfig, SyncRunResult, SyncWindow } from './types.js';
 
 /* ============================================================================================== *
@@ -242,47 +242,45 @@ async function runSync(config: AppConfig, window: SyncWindow): Promise<SyncRunRe
       `(source=${config.source.kind}, dryRun=${config.dryRun})`,
   );
 
-  // 1) Extract (in-memory).
-  const raws = await extractCustomers(config.source, window);
-  info(`Extracted ${raws.length} raw customer record(s)`);
+  // Stream the source one record at a time and process it in bounded-memory batches: extract →
+  // hash → upload. The whole audience is never materialized in memory at once. Each read batch is
+  // sized to the larger of the two platform batch sizes so each upload uses its full allowance.
+  const readBatchSize = Math.max(
+    config.destinations.meta.batchSize,
+    config.destinations.google.batchSize,
+    1,
+  );
 
-  // 2) Normalize + hash (in-memory, synchronous, pure).
-  const hashed = hashCustomers(raws);
-  info(`Hashed ${hashed.length} record(s) (${raws.length - hashed.length} dropped as unmatchable)`);
+  const session = createSyncSession(config, info);
+  let extractedCount = 0;
+  let hashedCount = 0;
 
-  // 3) Upload to destinations.
-  let results;
-  if (hashed.length === 0) {
-    warn('No hashable records — skipping upload.');
-    results = [
-      {
-        platform: 'meta' as const,
-        enabled: config.destinations.meta.enabled,
-        batchesSent: 0,
-        recordsAccepted: 0,
-        recordsRejected: 0,
-        skipped: true,
-      },
-      {
-        platform: 'google' as const,
-        enabled: config.destinations.google.enabled,
-        batchesSent: 0,
-        recordsAccepted: 0,
-        recordsRejected: 0,
-        skipped: true,
-      },
-    ];
-  } else {
-    results = await syncToDestinations(hashed, config, info);
+  for await (const rawBatch of batchAsync(streamCustomers(config.source, window), readBatchSize)) {
+    extractedCount += rawBatch.length;
+    const hashedBatch = hashCustomers(rawBatch);
+    hashedCount += hashedBatch.length;
+    if (hashedBatch.length > 0) {
+      await session.send(hashedBatch);
+    }
   }
+
+  info(
+    `Extracted ${extractedCount} record(s); hashed ${hashedCount} ` +
+      `(${extractedCount - hashedCount} dropped as unmatchable)`,
+  );
+  if (hashedCount === 0) {
+    warn('No hashable records — nothing was uploaded.');
+  }
+
+  const results = await session.finalize();
 
   const finishedAt = new Date();
   const result: SyncRunResult = {
     startedAt,
     finishedAt,
     window,
-    extractedCount: raws.length,
-    hashedCount: hashed.length,
+    extractedCount,
+    hashedCount,
     results,
     dryRun: config.dryRun,
   };
