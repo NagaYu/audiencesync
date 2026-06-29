@@ -46,6 +46,8 @@ export default tseslint.config(
     rules: {
       '@typescript-eslint/no-unsafe-assignment': 'off',
       '@typescript-eslint/no-unsafe-member-access': 'off',
+      // Async-generator fixtures legitimately yield without awaiting; allow it in tests only.
+      '@typescript-eslint/require-await': 'off',
     },
   },
   // Must come last to disable stylistic rules that would fight Prettier.
